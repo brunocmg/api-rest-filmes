@@ -1,4 +1,9 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  InternalServerErrorException,
+  BadRequestException,
+} from '@nestjs/common';
 import { CreateMovieDto } from './dto/create-movie.dto';
 import { UpdateMovieDto } from './dto/update-movie.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -7,72 +12,73 @@ import { PrismaService } from 'src/prisma/prisma.service';
 export class MoviesService {
   constructor(private prisma: PrismaService) {}
   async create(createMovieDto: CreateMovieDto) {
-    try{
+    try {
       const newMovie = await this.prisma.movie.create({
         data: {
           name: createMovieDto.name,
           genre: createMovieDto.genre,
           director: createMovieDto.director,
-          year: createMovieDto.year
-        }
-      })
-      return newMovie
-    
-    }catch(err){
-      console.log(err)
-      throw new HttpException("Task registration failed.", HttpStatus.BAD_REQUEST)
+          year: createMovieDto.year,
+        },
+      });
+      return newMovie;
+    } catch (err) {
+      console.error(err);
+      if ((err as any)?.name === 'PrismaClientKnownRequestError') throw err;
+      throw new InternalServerErrorException('Movie registration failed.');
     }
   }
 
   async findAll() {
     try {
-      const allTasks = await this.prisma.movie.findMany()
-      return allTasks
-    }catch(err){
-      console.log(err)
-      throw new HttpException('Failed to find tasks.', HttpStatus.BAD_REQUEST);
+      const allMovies = await this.prisma.movie.findMany({ orderBy: { id: 'asc' } });
+      return allMovies;
+    } catch (err) {
+      console.error(err);
+      throw new InternalServerErrorException('Failed to find movies.');
     }
   }
 
   async findOne(id: number) {
-      const task = await this.prisma.movie.findFirst({ where: {id: id}})
-      if (task?.name) return task
+    const movie = await this.prisma.movie.findFirst({ where: { id } });
+    if (movie) return movie;
 
-      throw new HttpException('Failed to find task.', HttpStatus.BAD_REQUEST);
+    throw new NotFoundException('Movie not found.');
   }
 
   async update(id: number, updateMovieDto: UpdateMovieDto) {
-    const findTask = await this.prisma.movie.findFirst({ where: { id: id } });
+    const findMovie = await this.prisma.movie.findFirst({ where: { id } });
 
-    if (!findTask) {
-      throw new HttpException('This task does not exist', HttpStatus.NOT_FOUND);
+    if (!findMovie) {
+      throw new NotFoundException('Movie not found.');
     }
 
-    const task = await this.prisma.movie.update({
-      where: {id: findTask.id},
+    const movie = await this.prisma.movie.update({
+      where: { id: findMovie.id },
       data: {
-        name: updateMovieDto.name ? updateMovieDto.name : findTask.name,
-        genre: updateMovieDto.genre ? updateMovieDto.genre : findTask.genre,
-        director: updateMovieDto.director ? updateMovieDto.director : findTask.director,
-        year: updateMovieDto.year ? updateMovieDto.year : findTask.year
-      }
-    })
-    return task
+        name: updateMovieDto.name ?? findMovie.name,
+        genre: updateMovieDto.genre ?? findMovie.genre,
+        director: updateMovieDto.director ?? findMovie.director,
+        year: updateMovieDto.year ?? findMovie.year,
+      },
+    });
+
+    return movie;
   }
 
   async remove(id: number) {
     try {
-      const findTask = await this.prisma.movie.findFirst({ where: { id: id } });
+      const findMovie = await this.prisma.movie.findFirst({ where: { id } });
 
-      if (!findTask) throw new HttpException('This task does not exist', HttpStatus.NOT_FOUND);
+      if (!findMovie) throw new NotFoundException('Movie not found.');
 
-      await this.prisma.movie.delete({where: {id: findTask.id}})
+      const deleted = await this.prisma.movie.delete({ where: { id: findMovie.id } });
 
-      return {message: 'Task deleted'}
-
+      return deleted;
     } catch (err) {
-      console.log(err);
-      throw new HttpException('Failed to delete task.', HttpStatus.BAD_REQUEST);
+      console.error(err);
+      if ((err as any)?.name === 'PrismaClientKnownRequestError') throw err;
+      throw new InternalServerErrorException('Failed to delete movie.');
     }
   }
 }
